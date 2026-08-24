@@ -5,7 +5,7 @@ LABELS = {"standard": "标准审查", "deep": "深度审查"}
 def depth_label(depth: ReviewDepth) -> str:
     return LABELS[depth]
 
-def tool_rounds(depth: ReviewDepth) -> int:
+def max_searches(depth: ReviewDepth) -> int:
     return 4 if depth == "deep" else 2
 
 def review_temperature(depth: ReviewDepth, configured: float) -> float:

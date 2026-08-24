@@ -6,7 +6,7 @@ from pathlib import Path
 import markdown
 from pydantic import BaseModel
 from app.agent import ReviewAgent
-from app.depth import depth_guidance, depth_label, review_temperature, tool_rounds
+from app.depth import depth_guidance, depth_label, max_searches, review_temperature
 from app.schemas import ComparisonItem, ContractFacts, ParsedContract, ReviewDepth, ReviewResponse, ReviewStance
 from app.stance import stance_guidance, stance_label
 
@@ -21,7 +21,7 @@ class ReviewPipeline:
         review_temp = review_temperature(depth, self.llm.settings.temperature)
         envelope = None if not bilingual else await self.llm.structured(f"比较以下中日双语合同，输出 {{\"items\": [ComparisonItem]}} JSON；没有差异可为空。\n{stance_guidance(stance)}\n{depth_guidance(depth)}\n每项必须填写 stance_assessment（对当前立场不利、不利以外的有利/中性/无法判断）和 stance_reason。\n{contract.text[:30000]}", ComparisonEnvelope, temperature=review_temp)
         comparison = [] if envelope is None else envelope.items
-        review, calls = await ReviewAgent(self.llm, self.knowledge).review(contract.text, facts, comparison, jurisdiction, stance, depth, tool_rounds(depth), review_temp)
+        review, calls = await ReviewAgent(self.llm, self.knowledge).review(contract.text, facts, comparison, jurisdiction, stance, depth, max_searches(depth), review_temp)
         response = ReviewResponse(review_id=uuid.uuid4().hex, created_at=datetime.now(timezone.utc), stance=stance, depth=depth, contract=contract, facts=facts, comparison=comparison, comparison_skipped=not bilingual, tool_calls=calls, review=review, report_markdown="")
         response.report_markdown = render_report(response)
         self.save(response); return response

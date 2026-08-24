@@ -12,17 +12,17 @@ TOOL = [{"type": "function", "function": {"name": "search_knowledge", "descripti
 class ReviewAgent:
     def __init__(self, llm, knowledge: KnowledgeBase): self.llm, self.knowledge = llm, knowledge
 
-    async def review(self, text: str, facts: ContractFacts, comparison: list[ComparisonItem], jurisdiction: str, stance: ReviewStance = "Auto", depth: ReviewDepth = "standard", max_tool_rounds: int | None = None, temperature: float | None = None) -> tuple[ReviewResult, list[ToolCallRecord]]:
-        rounds = max_tool_rounds or self.llm.settings.max_tool_rounds
-        prompt = f"""审查下列合同。你必须先至少调用一次 search_knowledge 获取依据，最多 {rounds} 轮；只引用工具真实返回的 chunk_id。完成后返回 JSON，格式为 {{\"issues\":[],\"missing_clauses\":[],\"overall_summary\":\"\"}}。\n{stance_guidance(stance)}\n{depth_guidance(depth)}\n每个风险事项必须填写 stance_assessment 和 stance_reason，并依据该立场生成修改建议和建议条款。\n合同事实：{facts.model_dump_json()}\n双语差异：{[x.model_dump() for x in comparison]}\n正文：{text[:30000]}"""
+    async def review(self, text: str, facts: ContractFacts, comparison: list[ComparisonItem], jurisdiction: str, stance: ReviewStance = "Auto", depth: ReviewDepth = "standard", max_searches: int | None = None, temperature: float | None = None) -> tuple[ReviewResult, list[ToolCallRecord]]:
+        search_limit = max_searches or self.llm.settings.max_tool_rounds
+        prompt = f"""审查下列合同。你必须先至少调用一次 search_knowledge 获取依据，最多调用 {search_limit} 次；每次回复最多调用一次该工具；只引用工具真实返回的 chunk_id。完成后返回 JSON，格式为 {{\"issues\":[],\"missing_clauses\":[],\"overall_summary\":\"\"}}。\n{stance_guidance(stance)}\n{depth_guidance(depth)}\n每个风险事项必须填写 stance_assessment 和 stance_reason，并依据该立场生成修改建议和建议条款。\n合同事实：{facts.model_dump_json()}\n双语差异：{[x.model_dump() for x in comparison]}\n正文：{text[:30000]}"""
         messages = [{"role": "system", "content": "你是合同审查 Agent。仅基于工具返回的依据引用 chunk_id。"}, {"role": "user", "content": prompt}]
         records: list[ToolCallRecord] = []
         temperature_kwargs = {"temperature": temperature} if temperature is not None else {}
-        for _ in range(rounds):
+        for _ in range(search_limit):
             response = await self.llm.tool_completion(messages, TOOL, **temperature_kwargs); message = response.choices[0].message
             calls = message.tool_calls or []
             if not calls:
-                if not records and _ < rounds - 1:
+                if not records and _ < search_limit - 1:
                     messages.extend([{"role": "assistant", "content": message.content or ""}, {"role": "user", "content": "在输出审查结论前必须调用一次 search_knowledge，并根据返回片段填写真实 chunk_id。"}])
                     continue
                 if not records:
@@ -41,11 +41,16 @@ class ReviewAgent:
                     )
                 self._validate_references(result, records); return result, records
             messages.append(message.model_dump(exclude_none=True))
+            remaining = search_limit - len(records)
             for call in calls:
+                if remaining <= 0:
+                    messages.append({"role": "tool", "tool_call_id": call.id, "content": "检索次数已达上限，请基于已有检索结果输出最终 JSON。"})
+                    continue
                 args = json.loads(call.function.arguments); jurisdiction_arg = args.get("jurisdiction", jurisdiction if jurisdiction in {"CN", "JP", "CN-JP"} else "CN-JP")
                 chunks = self.knowledge.search_knowledge(args["query"], jurisdiction_arg, args.get("top_k", 5)); records.append(ToolCallRecord(query=args["query"], jurisdiction=jurisdiction_arg, results=chunks))
                 messages.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps([x.model_dump() for x in chunks], ensure_ascii=False)})
-        messages.append({"role": "user", "content": "工具轮次已达上限。现在仅输出最终 JSON。"})
+                remaining -= 1
+        messages.append({"role": "user", "content": "检索次数已达上限。现在仅输出最终 JSON。"})
         result = await self.llm.structured("基于以下 Agent 对话输出最终审查 JSON：\n" + json.dumps(messages, ensure_ascii=False, default=str), ReviewResult, **temperature_kwargs)
         self._validate_references(result, records); return result, records
 
