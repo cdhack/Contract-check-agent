@@ -13,7 +13,7 @@ from app.llm_client import LLMClient
 from app.parsers import ParseError, parse_contract
 from app.pipeline import ReviewPipeline
 from app.prompt_builder import selection_prompt
-from app.schemas import AskSelectionRequest, AskSelectionResponse, KnowledgeSourceUpdate, ReviewHistoryItem, ReviewResponse, ReviewStance, VerificationResult, VerifyRequest, VerifyResponse
+from app.schemas import AskSelectionRequest, AskSelectionResponse, KnowledgeSourceUpdate, ReviewDepth, ReviewHistoryItem, ReviewResponse, ReviewStance, VerificationResult, VerifyRequest, VerifyResponse
 
 ROOT = Path(__file__).resolve().parents[1]; REPORTS = ROOT / "data" / "reports"
 app = FastAPI(title="contract-check-agent")
@@ -33,7 +33,7 @@ def review_history() -> list[ReviewHistoryItem]:
             stored = ReviewResponse.model_validate_json(path.read_text("utf-8"))
             created_at = stored.created_at or datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
             items.append(ReviewHistoryItem(review_id=stored.review_id, created_at=created_at, filename=stored.contract.filename,
-                title=stored.facts.title, language=stored.facts.language, stance=stored.stance, issue_count=len(stored.review.issues),
+                title=stored.facts.title, language=stored.facts.language, stance=stored.stance, depth=stored.depth, issue_count=len(stored.review.issues),
                 high_risk_count=sum(issue.severity == "high" for issue in stored.review.issues)))
         except (OSError, ValueError):
             continue
@@ -112,9 +112,9 @@ async def rebuild_knowledge():
     except Exception as exc: raise HTTPException(500, f"知识库重建失败：{exc}") from exc
 
 @app.post("/api/review")
-async def review(file: UploadFile = File(...), jurisdiction: str = Form("Auto"), stance: ReviewStance = Form("Auto")):
+async def review(file: UploadFile = File(...), jurisdiction: str = Form("Auto"), stance: ReviewStance = Form("Auto"), depth: ReviewDepth = Form("standard")):
     if not file.filename: raise HTTPException(400, "请选择合同文件")
-    try: contract = parse_contract(file.filename, await file.read()); result = await ReviewPipeline(LLMClient(get_settings()), KnowledgeBase()).run(contract, jurisdiction, stance); return result
+    try: contract = parse_contract(file.filename, await file.read()); result = await ReviewPipeline(LLMClient(get_settings()), KnowledgeBase()).run(contract, jurisdiction, stance, depth); return result
     except ParseError as exc: raise HTTPException(400, str(exc)) from exc
     except Exception as exc: raise HTTPException(500, f"审查失败：{exc}") from exc
 

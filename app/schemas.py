@@ -7,6 +7,7 @@ Severity = Literal["high", "medium", "low"]
 Jurisdiction = Literal["Auto", "CN", "JP", "CN-JP"]
 ReviewStance = Literal["Auto", "buyer", "seller", "neutral"]
 StanceAssessment = Literal["unfavorable", "favorable", "neutral", "uncertain"]
+ReviewDepth = Literal["standard", "deep"]
 
 class Party(BaseModel):
     name: str | None = None
@@ -107,6 +108,7 @@ class ReviewResponse(BaseModel):
     review_id: str
     created_at: datetime | None = None
     stance: ReviewStance = "Auto"
+    depth: ReviewDepth = "standard"
     contract: ParsedContract
     facts: ContractFacts
     comparison: list[ComparisonItem] = []
@@ -122,6 +124,7 @@ class ReviewHistoryItem(BaseModel):
     title: str | None = None
     language: str
     stance: ReviewStance = "Auto"
+    depth: ReviewDepth = "standard"
     issue_count: int
     high_risk_count: int
 

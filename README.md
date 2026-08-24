@@ -26,7 +26,7 @@ C:\Users\Administrator\AppData\Local\Programs\Python\Python312\python.exe -m ven
 
 在 `.env` 填写 `LLM_API_KEY`，或在页面设置区输入并保存。环境变量优先于 `data/settings.json`。默认值为 DeepSeek；页面也可改为 OpenRouter 或任意 OpenAI-compatible Base URL 和模型。点击“测试连接”确认后再上传合同。
 
-所有完整审查、报告生成与选中条款问答共享 `app.llm_client.LLMClient` 和同一配置。Agent 最多检索三轮，且会剔除不在工具真实返回结果中的引用 ID。
+所有完整审查、报告生成与一键核实共享 `app.llm_client.LLMClient` 和同一配置。上传时可选择标准审查或深度审查：标准审查最多 2 轮 RAG，深度审查最多 4 轮 RAG，并扩展覆盖主题与建议条款。Agent 会剔除不在工具真实返回结果中的引用 ID。
 
 ## 测试
 
@@ -40,9 +40,9 @@ pytest
 
 1. 启动服务，点击“重建知识库”。
 2. 在设置中配置并测试 DeepSeek 或其他兼容 API。
-3. 上传 `tests/fixtures/bilingual_contract.txt`，法域选择 `CN-JP`，点击“开始审查”。
+3. 上传 `tests/fixtures/bilingual_contract.txt`，选择法域、审查立场和审查深度后点击“开始审查”。
 4. 查看结构化字段、付款期限差异、Agent 的 `search_knowledge` 参数与来源片段、风险报告。
-5. 选中合同正文，点击“问 AI”，选择任务，查看回答和后端生成的 Prompt；下载 Markdown 或 JSON。
+5. 查看结构化信息、立场与深度评价、RAG 检索依据和最终报告；按需下载 Markdown 或 JSON。
 
 ## 限制
 

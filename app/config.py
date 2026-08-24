@@ -14,7 +14,7 @@ class LLMSettings(BaseModel):
     model: str = "deepseek-v4-flash"
     api_key: str = ""
     temperature: float = Field(default=0.1, ge=0, le=2)
-    max_tool_rounds: int = Field(default=3, ge=1, le=3)
+    max_tool_rounds: int = Field(default=4, ge=1, le=4)
 
 class EnvSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
