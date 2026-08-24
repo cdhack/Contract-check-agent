@@ -2,16 +2,17 @@ from __future__ import annotations
 import json
 from json import JSONDecodeError
 from pydantic import ValidationError
-from app.schemas import ContractFacts, ComparisonItem, ReviewResult, ToolCallRecord
+from app.schemas import ContractFacts, ComparisonItem, ReviewResult, ReviewStance, ToolCallRecord
 from app.knowledge import KnowledgeBase
+from app.stance import stance_guidance
 
 TOOL = [{"type": "function", "function": {"name": "search_knowledge", "description": "检索本地可信合同法律资料。", "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "jurisdiction": {"type": "string", "enum": ["CN", "JP", "CN-JP"]}, "top_k": {"type": "integer", "default": 5}}, "required": ["query", "jurisdiction"]}}}]
 
 class ReviewAgent:
     def __init__(self, llm, knowledge: KnowledgeBase): self.llm, self.knowledge = llm, knowledge
 
-    async def review(self, text: str, facts: ContractFacts, comparison: list[ComparisonItem], jurisdiction: str) -> tuple[ReviewResult, list[ToolCallRecord]]:
-        prompt = f"""审查下列合同。你必须先至少调用一次 search_knowledge 获取依据，最多三轮；只引用工具真实返回的 chunk_id。完成后返回 JSON，格式为 {{\"issues\":[],\"missing_clauses\":[],\"overall_summary\":\"\"}}。\n合同事实：{facts.model_dump_json()}\n双语差异：{[x.model_dump() for x in comparison]}\n正文：{text[:30000]}"""
+    async def review(self, text: str, facts: ContractFacts, comparison: list[ComparisonItem], jurisdiction: str, stance: ReviewStance = "Auto") -> tuple[ReviewResult, list[ToolCallRecord]]:
+        prompt = f"""审查下列合同。你必须先至少调用一次 search_knowledge 获取依据，最多三轮；只引用工具真实返回的 chunk_id。完成后返回 JSON，格式为 {{\"issues\":[],\"missing_clauses\":[],\"overall_summary\":\"\"}}。\n{stance_guidance(stance)}\n每个风险事项必须填写 stance_assessment 和 stance_reason，并依据该立场生成修改建议和建议条款。\n合同事实：{facts.model_dump_json()}\n双语差异：{[x.model_dump() for x in comparison]}\n正文：{text[:30000]}"""
         messages = [{"role": "system", "content": "你是合同审查 Agent。仅基于工具返回的依据引用 chunk_id。"}, {"role": "user", "content": prompt}]
         records: list[ToolCallRecord] = []
         for _ in range(self.llm.settings.max_tool_rounds):

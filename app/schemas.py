@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field, field_validator
 
 Severity = Literal["high", "medium", "low"]
 Jurisdiction = Literal["Auto", "CN", "JP", "CN-JP"]
+ReviewStance = Literal["Auto", "buyer", "seller", "neutral"]
+StanceAssessment = Literal["unfavorable", "favorable", "neutral", "uncertain"]
 
 class Party(BaseModel):
     name: str | None = None
@@ -38,6 +40,8 @@ class ComparisonItem(BaseModel):
     explanation: str
     severity: Severity
     recommendation: str
+    stance_assessment: StanceAssessment = "uncertain"
+    stance_reason: str = ""
 
 class KnowledgeChunk(BaseModel):
     chunk_id: str
@@ -86,6 +90,8 @@ class ReviewIssue(BaseModel):
     recommendation: str
     suggested_clause: str | None = None
     basis_chunk_ids: list[str] = []
+    stance_assessment: StanceAssessment = "uncertain"
+    stance_reason: str = ""
 
 class ReviewResult(BaseModel):
     issues: list[ReviewIssue] = []
@@ -100,6 +106,7 @@ class ParsedContract(BaseModel):
 class ReviewResponse(BaseModel):
     review_id: str
     created_at: datetime | None = None
+    stance: ReviewStance = "Auto"
     contract: ParsedContract
     facts: ContractFacts
     comparison: list[ComparisonItem] = []
@@ -114,6 +121,7 @@ class ReviewHistoryItem(BaseModel):
     filename: str
     title: str | None = None
     language: str
+    stance: ReviewStance = "Auto"
     issue_count: int
     high_risk_count: int
 
