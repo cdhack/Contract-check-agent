@@ -21,3 +21,13 @@ def test_employee_access_and_admin_controls(tmp_path, monkeypatch):
     assert any(item["employee_id"] == "3" for item in employees.json())
     assert updated.json()["role"] == "admin"
     assert deleted.status_code == 200
+
+
+def test_index_uses_the_current_login_script_version():
+    import app.main as main_module
+
+    with TestClient(main_module.app) as client:
+        response = client.get("/")
+
+    assert response.status_code == 200
+    assert '<script src="/static/app.js?v=0.5.2"></script>' in response.text

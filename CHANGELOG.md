@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2 - 2026-10-17
+
+- Versioned the browser login script URL so refreshed pages cannot reuse a stale pre-fix login script.
+
 ## 0.5.1 - 2026-10-17
 
 - Fixed employee-number entry by using standard form submission and decoupling successful login from background page-data loading.
