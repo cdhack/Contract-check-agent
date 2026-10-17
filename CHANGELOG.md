@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3 - 2026-10-17
+
+- Restored editable multi-line template fields and added reusable default clause text, including Japanese housing restrictions and the default second party name.
+
 ## 0.3.2 - 2026-10-17
 
 - Limited the generation note to the Contract Generation workspace and closed the LLM settings panel when switching workspaces.

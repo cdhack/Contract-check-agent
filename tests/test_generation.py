@@ -54,4 +54,7 @@ def test_generation_api_persists_lists_downloads_and_deletes(tmp_path, monkeypat
 def test_contract_templates_limit_input_fields_and_have_unique_ids():
     assert len({template.template_id for template in TEMPLATES}) == len(TEMPLATES)
     assert all(1 <= len(template.fields) <= 6 for template in TEMPLATES)
+    lease = next(template for template in TEMPLATES if template.template_id == "jp-housing-lease")
+    assert "乙方（承租方）：日全テック株式会社" in lease.fields[0].default
+    assert "宠物：可 / 不可" in lease.fields[2].default
     assert len(next(template for template in TEMPLATES if template.template_id == "free-draft").fields) == 1

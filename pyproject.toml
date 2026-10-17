@@ -1,6 +1,6 @@
 [project]
 name = "contract-check-agent"
-version = "0.3.2"
+version = "0.3.3"
 description = "Bilingual CN-JP contract review assistant"
 requires-python = ">=3.12"
 dependencies = [
