@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2 - 2026-10-17
+
+- Limited the generation note to the Contract Generation workspace and closed the LLM settings panel when switching workspaces.
+
 ## 0.3.1 - 2026-10-17
 
 - Reduced template inputs, added a final supplementary-provisions field, and added the reserved System Settings tab.
