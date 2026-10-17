@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 - 2026-10-17
+
+- Fixed employee-number entry by using standard form submission and decoupling successful login from background page-data loading.
+
 ## 0.5.0 - 2026-10-17
 
 - Added employee-number access sessions, login IP recording, admin password unlock, employee role management, and contract activity audit records.
