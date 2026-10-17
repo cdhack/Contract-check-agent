@@ -11,11 +11,12 @@ from app.config import LLMSettings, get_settings, save_settings
 from app.knowledge import KnowledgeBase
 from app.llm_client import LLMClient
 from app.parsers import ParseError, parse_contract
+from app.generation import ContractGenerationPipeline
 from app.pipeline import ReviewPipeline
 from app.prompt_builder import selection_prompt
-from app.schemas import AskSelectionRequest, AskSelectionResponse, KnowledgeSourceUpdate, ReviewDepth, ReviewHistoryItem, ReviewResponse, ReviewStance, VerificationResult, VerifyRequest, VerifyResponse
+from app.schemas import AskSelectionRequest, AskSelectionResponse, ContractGenerationRequest, ContractGenerationResponse, GenerationHistoryItem, KnowledgeSourceUpdate, ParsedContract, ReviewDepth, ReviewHistoryItem, ReviewResponse, ReviewStance, VerificationResult, VerifyRequest, VerifyResponse
 
-ROOT = Path(__file__).resolve().parents[1]; REPORTS = ROOT / "data" / "reports"
+ROOT = Path(__file__).resolve().parents[1]; REPORTS = ROOT / "data" / "reports"; GENERATIONS = ROOT / "data" / "generations"
 app = FastAPI(title="contract-check-agent")
 app.mount("/static", StaticFiles(directory=ROOT / "app" / "static"), name="static")
 templates = Jinja2Templates(directory=ROOT / "app" / "templates")
@@ -42,6 +43,30 @@ def review_history() -> list[ReviewHistoryItem]:
 def delete_review(review_id: str) -> None:
     paths = [REPORTS / f"{review_id}.json", REPORTS / f"{review_id}.md"]
     if not any(path.exists() for path in paths): raise FileNotFoundError(review_id)
+    for path in paths:
+        if path.exists(): path.unlink()
+
+def load_generation(generation_id: str) -> ContractGenerationResponse:
+    path = GENERATIONS / f"{generation_id}.json"
+    if not path.exists(): raise HTTPException(404, "合同草案不存在")
+    return ContractGenerationResponse.model_validate_json(path.read_text("utf-8"))
+
+def generation_history() -> list[GenerationHistoryItem]:
+    if not GENERATIONS.exists(): return []
+    items = []
+    for path in GENERATIONS.glob("*.json"):
+        try:
+            stored = ContractGenerationResponse.model_validate_json(path.read_text("utf-8"))
+            items.append(GenerationHistoryItem(generation_id=stored.generation_id, created_at=stored.created_at, title=stored.result.title,
+                contract_type=stored.request.contract_type, language=stored.request.language, drafting_position=stored.request.drafting_position,
+                missing_information_count=len(stored.result.missing_information)))
+        except (OSError, ValueError):
+            continue
+    return sorted(items, key=lambda item: item.created_at, reverse=True)
+
+def delete_generation(generation_id: str) -> None:
+    paths = [GENERATIONS / f"{generation_id}.json", GENERATIONS / f"{generation_id}.md"]
+    if not any(path.exists() for path in paths): raise FileNotFoundError(generation_id)
     for path in paths:
         if path.exists(): path.unlink()
 
@@ -131,6 +156,31 @@ async def remove_review(review_id: str):
         return {"ok": True, "message": "审查记录已删除。"}
     except FileNotFoundError as exc: raise HTTPException(404, "审查记录不存在") from exc
 
+@app.post("/api/generations", response_model=ContractGenerationResponse)
+async def generate_contract(body: ContractGenerationRequest):
+    try: return await ContractGenerationPipeline(LLMClient(get_settings())).run(body)
+    except Exception as exc: raise HTTPException(500, f"合同生成失败：{exc}") from exc
+
+@app.get("/api/generations", response_model=list[GenerationHistoryItem])
+async def list_generations(): return generation_history()
+
+@app.get("/api/generations/{generation_id}", response_model=ContractGenerationResponse)
+async def get_generation(generation_id: str): return load_generation(generation_id)
+
+@app.delete("/api/generations/{generation_id}")
+async def remove_generation(generation_id: str):
+    try:
+        delete_generation(generation_id)
+        return {"ok": True, "message": "生成记录已删除。"}
+    except FileNotFoundError as exc: raise HTTPException(404, "生成记录不存在") from exc
+
+@app.post("/api/generations/{generation_id}/review", response_model=ReviewResponse)
+async def review_generated_contract(generation_id: str):
+    generated = load_generation(generation_id)
+    contract = ParsedContract(filename=f"{generated.result.title}.md", text=generated.result.document_markdown)
+    try: return await ReviewPipeline(LLMClient(get_settings()), KnowledgeBase()).run(contract, generated.request.jurisdiction, generated.request.drafting_position, "standard")
+    except Exception as exc: raise HTTPException(500, f"草案审查失败：{exc}") from exc
+
 @app.post("/api/verify", response_model=VerifyResponse)
 async def verify(body: VerifyRequest):
     prompt = f"""你是中日跨境合同与商业文本核实助手。直接核实用户输入；事实或法律依据不足时明确说明。
@@ -152,4 +202,11 @@ async def download(review_id: str, format: str):
     if format not in {"md", "json"}: raise HTTPException(404)
     path = REPORTS / f"{review_id}.{format}"
     if not path.exists(): raise HTTPException(404, "报告不存在")
+    return FileResponse(path, filename=path.name)
+
+@app.get("/api/generations/{generation_id}/download/{format}")
+async def download_generation(generation_id: str, format: str):
+    if format not in {"md", "json"}: raise HTTPException(404)
+    path = GENERATIONS / f"{generation_id}.{format}"
+    if not path.exists(): raise HTTPException(404, "合同草案不存在")
     return FileResponse(path, filename=path.name)

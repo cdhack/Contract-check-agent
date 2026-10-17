@@ -1,14 +1,14 @@
 # contract-check-agent
 
-面向中日跨境贸易和商业服务的双语合同初步审查系统。它读取文本型 PDF、DOCX、TXT，使用可配置的 OpenAI-compatible LLM 提取合同事实、比较中日条款，并通过一个只读 RAG 工具取得本地可信资料依据。系统不替代律师。
+面向中日跨境贸易和商业服务的双语合同工作台。它可以读取文本型 PDF、DOCX、TXT 进行初步审查，也可以根据结构化交易信息生成可追溯的合同草案；审查通过一个只读 RAG 工具取得本地可信资料依据。系统不替代律师。
 
 ## 架构
 
-`FastAPI 页面/API -> parsers -> LLM structured output -> ReviewAgent(search_knowledge) -> Qdrant Local + FastEmbed -> Pydantic 校验 -> Markdown/JSON 报告`。
+`FastAPI 页面/API -> 结构化交易信息或合同解析 -> LLM structured output -> 生成草案或 ReviewAgent(search_knowledge) -> Qdrant Local + FastEmbed -> Pydantic 校验 -> Markdown/JSON 文件`。
 
 - `app/`: Web、解析、统一 LLM 客户端、Prompt Builder、Agent、流水线。
 - `knowledge_sources/`: 由 manifest 管理的中国、日本资料和企业审查清单。
-- `data/`: 被 Git 忽略的设置、Qdrant 索引和报告。
+- `data/`: 被 Git 忽略的设置、Qdrant 索引、审查报告和生成草案。
 - `tests/`: 不使用真实 API 的 Mock LLM 端到端测试，示例合同在 `tests/fixtures/`。
 
 ## 安装与运行（Windows）
@@ -26,7 +26,7 @@ C:\Users\Administrator\AppData\Local\Programs\Python\Python312\python.exe -m ven
 
 在 `.env` 填写 `LLM_API_KEY`，或在页面设置区输入并保存。环境变量优先于 `data/settings.json`。默认值为 DeepSeek；页面也可改为 OpenRouter 或任意 OpenAI-compatible Base URL 和模型。点击“测试连接”确认后再上传合同。
 
-所有完整审查、报告生成与一键核实共享 `app.llm_client.LLMClient` 和同一配置。上传时可选择标准审查或深度审查：标准审查最多 2 轮 RAG，深度审查最多 4 轮 RAG，并扩展覆盖主题与建议条款。Agent 会剔除不在工具真实返回结果中的引用 ID。
+所有完整审查、合同生成、报告生成与一键核实共享 `app.llm_client.LLMClient` 和同一配置。上传时可选择标准审查或深度审查：标准审查最多 2 次实际 RAG 检索，深度审查最多 4 次，并扩展覆盖主题与建议条款。Agent 会剔除不在工具真实返回结果中的引用 ID。
 
 ## 测试
 
@@ -40,12 +40,14 @@ pytest
 
 1. 启动服务，点击“重建知识库”。
 2. 在设置中配置并测试 DeepSeek 或其他兼容 API。
-3. 上传 `tests/fixtures/bilingual_contract.txt`，选择法域、审查立场和审查深度后点击“开始审查”。
-4. 查看结构化字段、付款期限差异、Agent 的 `search_knowledge` 参数与来源片段、风险报告。
-5. 查看结构化信息、立场与深度评价、RAG 检索依据和最终报告；按需下载 Markdown 或 JSON。
+3. 在“合同审查”上传 `tests/fixtures/bilingual_contract.txt`，选择法域、审查立场和审查深度后点击“开始审查”。
+4. 在“合同生成”填写双方主体、合同范围、商业条款和特殊要求，生成草案、待确认信息和条款覆盖清单。
+5. 在生成结果中确认待确认事项，按需下载 Markdown 或 JSON，或点击“一键审查草案”执行标准审查。
+6. 查看审查结构化信息、立场与深度评价、RAG 检索依据和最终报告。
 
 ## 限制
 
 - 不支持扫描件 OCR、登录、异步队列、在线编辑或自动联网抓取。
+- 生成模块会将未确认的商业信息标为待确认占位符；草案必须经过业务及法务复核后使用。
 - 内置资料是基础摘录；上线前应由法务更新 `manifest.yaml` 和资料正文。
 - 使用真实 API 需要自行承担模型、资料时效与人工法律复核责任。
