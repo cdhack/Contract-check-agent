@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0 - 2026-10-17
+
+- Added Chinese-only, Japanese-only, and default bilingual contract generation options.
+- Added a reusable goods sale contract template with prefilled goods, payment, delivery, acceptance, warranty, and liability fields.
+
 ## 0.3.3 - 2026-10-17
 
 - Restored editable multi-line template fields and added reusable default clause text, including Japanese housing restrictions and the default second party name.

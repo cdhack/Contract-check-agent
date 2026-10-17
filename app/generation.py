@@ -15,12 +15,13 @@ class ContractGenerationPipeline:
         template = get_template(request.template_id)
         answers = validate_answers(template, request.answers)
         supplement = answers.get("supplement") or "无"
+        language_instruction = {"bilingual": "使用中日双语；每个条款必须先给出中文，再给出内容等效的日文，并保持条款编号、金额、期限、义务主体与例外条件一致。", "zh": "仅使用中文起草合同，不要输出日文。", "ja": "仅使用日文起草合同，不要输出中文。"}[request.language]
         prompt = f"""你是严谨的中日跨境合同起草助手。基于下方经过结构化确认的交易信息起草完整合同草案。
 不得编造未提供的商业事实；未提供且无法安全省略的信息，必须在对应条款中使用 [待确认] 占位符，并在 missing_information 中逐项列出。
 合同模板：{template.label}。模板说明：{template.description}
 参考来源：{template.source_title} {template.source_url or '无外部来源'}；版本：{template.version}。该来源只作为结构参考，不得声称已对具体交易作出法律意见。
 模板专属规则：{template.instructions}
-默认使用中日双语；每个条款必须先给出中文，再给出内容等效的日文，并保持条款编号、金额、期限、义务主体与例外条件一致。
+语言要求：{language_instruction}
 document_markdown 只能包含完整合同正文，不要加入解释性前言或“补充说明”条款；系统会在正文末尾统一追加补充说明。coverage 逐项说明关键条款已纳入或仍待确认。
 
 已确认模板字段：
@@ -65,7 +66,8 @@ def render_generation_report(response: ContractGenerationResponse) -> str:
     coverage = [f"- {'已纳入' if item.status == 'included' else '待确认'}：{item.clause} - {item.note}" for item in result.coverage] or ["- 未提供"]
     template = get_template(request.template_id)
     labels = {field.key: field.label for field in template.fields}
-    lines = [f"# {result.title}\n", f"- 生成编号：`{response.generation_id}`", f"- 模板：{response.template_label}", f"- 模板版本：{response.template_version}", f"- 参考来源：{response.template_source_title} {response.template_source_url or ''}\n", "## 已确认交易信息"]
+    language_label = {"bilingual": "中日双语", "zh": "中文", "ja": "日文"}[request.language]
+    lines = [f"# {result.title}\n", f"- 生成编号：`{response.generation_id}`", f"- 模板：{response.template_label}", f"- 语言：{language_label}", f"- 模板版本：{response.template_version}", f"- 参考来源：{response.template_source_title} {response.template_source_url or ''}\n", "## 已确认交易信息"]
     for key, value in request.answers.items():
         label = labels.get(key, key)
         lines.append(f"- {label}：{value or '未提供'}")

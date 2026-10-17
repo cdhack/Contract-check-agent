@@ -38,10 +38,12 @@ def test_generation_api_persists_lists_downloads_and_deletes(tmp_path, monkeypat
         deleted = client.delete(f"/api/generations/{generation_id}")
     assert created.status_code == 200
     assert created.json()["result"]["missing_information"] == ["请确认验收标准"]
+    assert created.json()["request"]["language"] == "bilingual"
     assert "补充说明" in created.json()["result"]["document_markdown"]
+    assert "语言：中日双语" in created.json()["report_markdown"]
     assert created.json()["template_label"] == "日本房屋租赁合同"
     assert templates.status_code == 200
-    assert len(templates.json()) == 7
+    assert len(templates.json()) == 8
     assert history.json()[0]["generation_id"] == generation_id
     assert history.json()[0]["template_label"] == "日本房屋租赁合同"
     assert detail.json()["model"] == "mock-generation"
@@ -55,6 +57,8 @@ def test_contract_templates_limit_input_fields_and_have_unique_ids():
     assert len({template.template_id for template in TEMPLATES}) == len(TEMPLATES)
     assert all(1 <= len(template.fields) <= 6 for template in TEMPLATES)
     lease = next(template for template in TEMPLATES if template.template_id == "jp-housing-lease")
+    goods = next(template for template in TEMPLATES if template.template_id == "goods-sale")
     assert "乙方（承租方）：日全テック株式会社" in lease.fields[0].default
     assert "宠物：可 / 不可" in lease.fields[2].default
+    assert "乙方（买方）：日全テック株式会社" in goods.fields[0].default
     assert len(next(template for template in TEMPLATES if template.template_id == "free-draft").fields) == 1
