@@ -192,6 +192,7 @@ class ContractGenerationResponse(BaseModel):
     template_source_title: str
     template_source_url: str
     template_version: str
+    knowledge_chunks: list[KnowledgeChunk] = []
     result: GeneratedContract
     model: str
     report_markdown: str
@@ -202,3 +203,37 @@ class GenerationHistoryItem(BaseModel):
     title: str
     template_label: str
     missing_information_count: int
+
+EmployeeRole = Literal["user", "admin"]
+
+class AccessLoginRequest(BaseModel):
+    employee_id: str = Field(min_length=1, max_length=100)
+
+class AccessSessionResponse(BaseModel):
+    authenticated: bool
+    employee_id: str | None = None
+    role: EmployeeRole | None = None
+    admin_unlocked: bool = False
+
+class AdminPasswordRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=100)
+
+class EmployeeCreateRequest(BaseModel):
+    employee_id: str = Field(min_length=1, max_length=100)
+    role: EmployeeRole = "user"
+
+class EmployeeRoleUpdateRequest(BaseModel):
+    role: EmployeeRole
+
+class EmployeeRecord(BaseModel):
+    employee_id: str
+    role: EmployeeRole
+    created_at: datetime
+
+class ActivityRecord(BaseModel):
+    employee_id: str
+    role: EmployeeRole
+    action: str
+    contract_name: str
+    created_at: datetime
+    ip_address: str

@@ -63,6 +63,38 @@ sources:
   document_type: law_fulltext
   path: jp/arbitration_act_full.txt
   enabled: true
+- source_id: jp-land-building-leases-act
+  title: 借地借家法（賃貸借関連抜粋）
+  jurisdiction: JP
+  source_url: https://elaws.e-gov.go.jp/document?lawid=403AC0000000090
+  effective_date: '現行法（e-Gov原文参照）'
+  document_type: law
+  path: jp/land_building_leases_act.txt
+  enabled: true
+- source_id: jp-real-estate-transaction-business-act
+  title: 宅地建物取引業法（不動産取引関連抜粋）
+  jurisdiction: JP
+  source_url: https://elaws.e-gov.go.jp/document?lawid=327AC0000000176
+  effective_date: '現行法（e-Gov原文参照）'
+  document_type: law
+  path: jp/real_estate_transaction_business_act.txt
+  enabled: true
+- source_id: jp-foreign-exchange-foreign-trade-act
+  title: 外国為替及び外国貿易法（支払等関連抜粋）
+  jurisdiction: JP
+  source_url: https://elaws.e-gov.go.jp/document?lawid=324AC0000000228
+  effective_date: '現行法（e-Gov原文参照）'
+  document_type: law
+  path: jp/foreign_exchange_foreign_trade_act.txt
+  enabled: true
+- source_id: jp-crime-proceeds-transfer-prevention-act
+  title: 犯罪による収益の移転防止に関する法律（本人確認等関連抜粋）
+  jurisdiction: JP
+  source_url: https://elaws.e-gov.go.jp/document?lawid=419AC0000000022
+  effective_date: '現行法（e-Gov原文参照）'
+  document_type: law
+  path: jp/crime_proceeds_transfer_prevention_act.txt
+  enabled: true
 - source_id: internal-checklist
   title: 企业中日合同审查清单
   jurisdiction: CN-JP

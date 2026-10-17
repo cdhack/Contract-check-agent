@@ -19,6 +19,7 @@ async def test_history_lists_and_loads_saved_reviews(tmp_path, monkeypatch):
     contract = parse_contract("sample.txt", (Path(__file__).parent / "fixtures" / "bilingual_contract.txt").read_bytes())
     saved = await ReviewPipeline(MockLLM(), KnowledgeBase(path=tmp_path / "qdrant")).run(contract, "CN-JP")
     with TestClient(main_module.app) as client:
+        assert client.post("/api/access/login", json={"employee_id": "1"}).status_code == 200
         history = client.get("/api/reviews")
         detail = client.get(f"/api/reviews/{saved.review_id}")
         knowledge_page = client.get("/knowledge")

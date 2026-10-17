@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 - 2026-10-17
+
+- Added employee-number access sessions, login IP recording, admin password unlock, employee role management, and contract activity audit records.
+- Added Japanese real-estate and foreign-exchange legal materials to the shared RAG knowledge base.
+- Added shared RAG retrieval, on-page evidence display, and persisted retrieval sources for contract generation.
+
 ## 0.4.0 - 2026-10-17
 
 - Added Chinese-only, Japanese-only, and default bilingual contract generation options.

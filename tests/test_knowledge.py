@@ -7,6 +7,7 @@ def test_chunking_reads_all_manifest_sources(tmp_path):
     chunks = kb._chunks()
     assert len(chunks) >= 30
     assert {x.jurisdiction for x in chunks} >= {"CN", "JP", "CN-JP"}
+    assert {"jp-land-building-leases-act", "jp-real-estate-transaction-business-act", "jp-foreign-exchange-foreign-trade-act", "jp-crime-proceeds-transfer-prevention-act"} <= {chunk.source_id for chunk in chunks}
 
 def test_source_configuration_can_disable_a_document(tmp_path):
     document = tmp_path / "source.txt"

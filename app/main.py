@@ -3,10 +3,11 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
+from app.access import AccessSession, AccessStore
 from app.config import LLMSettings, get_settings, save_settings
 from app.knowledge import KnowledgeBase
 from app.llm_client import LLMClient
@@ -15,12 +16,32 @@ from app.contract_templates import list_templates
 from app.generation import ContractGenerationPipeline
 from app.pipeline import ReviewPipeline
 from app.prompt_builder import selection_prompt
-from app.schemas import AskSelectionRequest, AskSelectionResponse, ContractGenerationRequest, ContractGenerationResponse, GenerationHistoryItem, KnowledgeSourceUpdate, ParsedContract, ReviewDepth, ReviewHistoryItem, ReviewResponse, ReviewStance, VerificationResult, VerifyRequest, VerifyResponse
+from app.schemas import AccessLoginRequest, AccessSessionResponse, ActivityRecord, AdminPasswordRequest, AskSelectionRequest, AskSelectionResponse, ContractGenerationRequest, ContractGenerationResponse, EmployeeCreateRequest, EmployeeRecord, EmployeeRoleUpdateRequest, GenerationHistoryItem, KnowledgeSourceUpdate, ParsedContract, ReviewDepth, ReviewHistoryItem, ReviewResponse, ReviewStance, VerificationResult, VerifyRequest, VerifyResponse
 
-ROOT = Path(__file__).resolve().parents[1]; REPORTS = ROOT / "data" / "reports"; GENERATIONS = ROOT / "data" / "generations"
+ROOT = Path(__file__).resolve().parents[1]; REPORTS = ROOT / "data" / "reports"; GENERATIONS = ROOT / "data" / "generations"; ACCESS = AccessStore(ROOT / "data" / "access.sqlite")
 app = FastAPI(title="contract-check-agent")
 app.mount("/static", StaticFiles(directory=ROOT / "app" / "static"), name="static")
 templates = Jinja2Templates(directory=ROOT / "app" / "templates")
+
+@app.middleware("http")
+async def require_employee_access(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/static") or path in {"/", "/api/access/login", "/api/access/session", "/api/access/logout"}:
+        return await call_next(request)
+    if path.startswith("/api/"):
+        session = ACCESS.session(request.cookies.get("contract_access"))
+        if session is None: return JSONResponse(status_code=401, content={"detail": "请先输入工号"})
+        request.state.access = session
+    return await call_next(request)
+
+def current_access(request: Request) -> AccessSession:
+    return request.state.access
+
+def require_admin(request: Request) -> AccessSession:
+    session = current_access(request)
+    if session.role != "admin": raise HTTPException(403, "仅管理员可以进入后台")
+    if not session.admin_unlocked: raise HTTPException(403, "请先输入管理密码")
+    return session
 
 def load_review(review_id: str) -> ReviewResponse:
     path = REPORTS / f"{review_id}.json"
@@ -72,6 +93,65 @@ def delete_generation(generation_id: str) -> None:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request): return templates.TemplateResponse(request, "index.html")
+
+@app.get("/api/access/session", response_model=AccessSessionResponse)
+async def access_session(request: Request):
+    session = ACCESS.session(request.cookies.get("contract_access"))
+    return AccessSessionResponse(authenticated=session is not None, employee_id=None if session is None else session.employee_id, role=None if session is None else session.role, admin_unlocked=False if session is None else session.admin_unlocked)
+
+@app.post("/api/access/login", response_model=AccessSessionResponse)
+async def access_login(body: AccessLoginRequest, request: Request):
+    ip_address = request.client.host if request.client else "unknown"
+    session = ACCESS.login(body.employee_id, ip_address)
+    if session is None: raise HTTPException(404, "工号不存在")
+    response = JSONResponse(AccessSessionResponse(authenticated=True, employee_id=session.employee_id, role=session.role, admin_unlocked=False).model_dump())
+    response.set_cookie("contract_access", session.session_id, httponly=True, samesite="lax")
+    return response
+
+@app.post("/api/access/logout")
+async def access_logout(request: Request):
+    ACCESS.logout(request.cookies.get("contract_access"))
+    response = JSONResponse({"ok": True})
+    response.delete_cookie("contract_access")
+    return response
+
+@app.post("/api/admin/unlock", response_model=AccessSessionResponse)
+async def admin_unlock(body: AdminPasswordRequest, request: Request):
+    session = current_access(request)
+    if session.role != "admin": raise HTTPException(403, "仅管理员可以进入后台")
+    if not ACCESS.unlock_admin(session, body.password): raise HTTPException(403, "管理密码错误")
+    return AccessSessionResponse(authenticated=True, employee_id=session.employee_id, role=session.role, admin_unlocked=True)
+
+@app.get("/api/admin/employees", response_model=list[EmployeeRecord])
+async def admin_employees(request: Request):
+    require_admin(request)
+    return ACCESS.employees()
+
+@app.post("/api/admin/employees", response_model=EmployeeRecord)
+async def admin_add_employee(body: EmployeeCreateRequest, request: Request):
+    require_admin(request)
+    try: return ACCESS.add_employee(body.employee_id, body.role)
+    except ValueError as exc: raise HTTPException(409, str(exc)) from exc
+
+@app.put("/api/admin/employees/{employee_id}", response_model=EmployeeRecord)
+async def admin_update_employee(employee_id: str, body: EmployeeRoleUpdateRequest, request: Request):
+    require_admin(request)
+    try: return ACCESS.update_role(employee_id, body.role)
+    except KeyError as exc: raise HTTPException(404, "工号不存在") from exc
+
+@app.delete("/api/admin/employees/{employee_id}")
+async def admin_delete_employee(employee_id: str, request: Request):
+    require_admin(request)
+    try:
+        ACCESS.delete_employee(employee_id)
+        return {"ok": True}
+    except KeyError as exc: raise HTTPException(404, "工号不存在") from exc
+    except ValueError as exc: raise HTTPException(400, str(exc)) from exc
+
+@app.get("/api/admin/activities", response_model=list[ActivityRecord])
+async def admin_activities(request: Request):
+    require_admin(request)
+    return ACCESS.activities()
 
 @app.get("/knowledge", response_class=HTMLResponse)
 async def knowledge_page(request: Request): return templates.TemplateResponse(request, "knowledge.html")
@@ -137,9 +217,12 @@ async def rebuild_knowledge():
     except Exception as exc: raise HTTPException(500, f"知识库重建失败：{exc}") from exc
 
 @app.post("/api/review")
-async def review(file: UploadFile = File(...), jurisdiction: str = Form("Auto"), stance: ReviewStance = Form("Auto"), depth: ReviewDepth = Form("standard")):
+async def review(request: Request, file: UploadFile = File(...), jurisdiction: str = Form("Auto"), stance: ReviewStance = Form("Auto"), depth: ReviewDepth = Form("standard")):
     if not file.filename: raise HTTPException(400, "请选择合同文件")
-    try: contract = parse_contract(file.filename, await file.read()); result = await ReviewPipeline(LLMClient(get_settings()), KnowledgeBase()).run(contract, jurisdiction, stance, depth); return result
+    try:
+        contract = parse_contract(file.filename, await file.read()); result = await ReviewPipeline(LLMClient(get_settings()), KnowledgeBase()).run(contract, jurisdiction, stance, depth)
+        ACCESS.record_activity(current_access(request), "审阅合同", result.facts.title or contract.filename)
+        return result
     except ParseError as exc: raise HTTPException(400, str(exc)) from exc
     except Exception as exc: raise HTTPException(500, f"审查失败：{exc}") from exc
 
@@ -157,8 +240,11 @@ async def remove_review(review_id: str):
     except FileNotFoundError as exc: raise HTTPException(404, "审查记录不存在") from exc
 
 @app.post("/api/generations", response_model=ContractGenerationResponse)
-async def generate_contract(body: ContractGenerationRequest):
-    try: return await ContractGenerationPipeline(LLMClient(get_settings())).run(body)
+async def generate_contract(body: ContractGenerationRequest, request: Request):
+    try:
+        result = await ContractGenerationPipeline(LLMClient(get_settings()), KnowledgeBase()).run(body)
+        ACCESS.record_activity(current_access(request), "生成合同", result.result.title)
+        return result
     except (KeyError, ValueError) as exc: raise HTTPException(422, str(exc)) from exc
     except Exception as exc: raise HTTPException(500, f"合同生成失败：{exc}") from exc
 
@@ -179,10 +265,13 @@ async def remove_generation(generation_id: str):
     except FileNotFoundError as exc: raise HTTPException(404, "生成记录不存在") from exc
 
 @app.post("/api/generations/{generation_id}/review", response_model=ReviewResponse)
-async def review_generated_contract(generation_id: str):
+async def review_generated_contract(generation_id: str, request: Request):
     generated = load_generation(generation_id)
     contract = ParsedContract(filename=f"{generated.result.title}.md", text=generated.result.document_markdown)
-    try: return await ReviewPipeline(LLMClient(get_settings()), KnowledgeBase()).run(contract, "CN-JP", "neutral", "standard")
+    try:
+        result = await ReviewPipeline(LLMClient(get_settings()), KnowledgeBase()).run(contract, "CN-JP", "neutral", "standard")
+        ACCESS.record_activity(current_access(request), "审阅生成草案", generated.result.title)
+        return result
     except Exception as exc: raise HTTPException(500, f"草案审查失败：{exc}") from exc
 
 @app.post("/api/verify", response_model=VerifyResponse)
@@ -202,15 +291,17 @@ async def ask_selection(body: AskSelectionRequest):
     return AskSelectionResponse(selected_text=body.selected_text, task=body.task, answer=answer, model=get_settings().model, prompt=prompt)
 
 @app.get("/api/reports/{review_id}.{format}")
-async def download(review_id: str, format: str):
+async def download(review_id: str, format: str, request: Request):
     if format not in {"md", "json"}: raise HTTPException(404)
     path = REPORTS / f"{review_id}.{format}"
     if not path.exists(): raise HTTPException(404, "报告不存在")
+    ACCESS.record_activity(current_access(request), "下载审阅合同", load_review(review_id).facts.title or review_id)
     return FileResponse(path, filename=path.name)
 
 @app.get("/api/generations/{generation_id}/download/{format}")
-async def download_generation(generation_id: str, format: str):
+async def download_generation(generation_id: str, format: str, request: Request):
     if format not in {"docx", "json", "md"}: raise HTTPException(404)
     path = GENERATIONS / f"{generation_id}.{format}"
     if not path.exists(): raise HTTPException(404, "合同草案不存在")
+    ACCESS.record_activity(current_access(request), "下载生成合同", load_generation(generation_id).result.title)
     return FileResponse(path, filename=path.name)
