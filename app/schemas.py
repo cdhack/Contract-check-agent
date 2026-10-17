@@ -160,27 +160,15 @@ DraftingPosition = Literal["buyer", "seller", "neutral"]
 CoverageStatus = Literal["included", "needs_confirmation"]
 
 class ContractGenerationRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
-    contract_type: str = Field(min_length=1, max_length=100)
-    jurisdiction: Literal["CN", "JP", "CN-JP"] = "CN-JP"
-    language: GenerationLanguage = "bilingual"
-    drafting_position: DraftingPosition = "neutral"
-    party_a_name: str = Field(min_length=1, max_length=200)
-    party_a_role: str = Field(min_length=1, max_length=100)
-    party_b_name: str = Field(min_length=1, max_length=200)
-    party_b_role: str = Field(min_length=1, max_length=100)
-    scope: str = Field(min_length=1, max_length=6000)
-    price: str = Field(default="", max_length=500)
-    payment_terms: str = Field(default="", max_length=2000)
-    delivery_terms: str = Field(default="", max_length=2000)
-    acceptance_terms: str = Field(default="", max_length=2000)
-    term: str = Field(default="", max_length=1000)
-    intellectual_property: str = Field(default="", max_length=2000)
-    confidentiality: str = Field(default="", max_length=2000)
-    liability: str = Field(default="", max_length=2000)
-    dispute_resolution: str = Field(default="", max_length=2000)
-    language_priority: str = Field(default="", max_length=500)
-    special_requirements: str = Field(default="", max_length=4000)
+    template_id: str = Field(min_length=1, max_length=100)
+    answers: dict[str, str] = Field(min_length=1, max_length=5)
+
+    @field_validator("answers")
+    @classmethod
+    def validate_answers(cls, answers: dict[str, str]) -> dict[str, str]:
+        if any(not key or len(key) > 100 or len(value) > 6000 for key, value in answers.items()):
+            raise ValueError("模板字段无效或内容过长")
+        return answers
 
 class ClauseCoverage(BaseModel):
     clause: str
@@ -199,6 +187,10 @@ class ContractGenerationResponse(BaseModel):
     generation_id: str
     created_at: datetime
     request: ContractGenerationRequest
+    template_label: str
+    template_source_title: str
+    template_source_url: str
+    template_version: str
     result: GeneratedContract
     model: str
     report_markdown: str
@@ -207,7 +199,5 @@ class GenerationHistoryItem(BaseModel):
     generation_id: str
     created_at: datetime
     title: str
-    contract_type: str
-    language: GenerationLanguage
-    drafting_position: DraftingPosition
+    template_label: str
     missing_information_count: int

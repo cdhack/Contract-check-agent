@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 - 2026-10-17
+
+- Replaced the fixed generation form with seven reusable contract templates and a single free-drafting field.
+- Added template-specific input fields, source/version metadata, Japanese real-estate references, and selectable recruitment or dispatch modes for Japan IT staffing workflows.
+
 ## 0.2.0 - 2026-10-17
 
 - Added a structured contract-generation workspace with drafting inputs, bilingual drafts, assumptions, missing-information checks, and clause coverage.

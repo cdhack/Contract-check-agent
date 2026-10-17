@@ -11,6 +11,7 @@ from app.config import LLMSettings, get_settings, save_settings
 from app.knowledge import KnowledgeBase
 from app.llm_client import LLMClient
 from app.parsers import ParseError, parse_contract
+from app.contract_templates import list_templates
 from app.generation import ContractGenerationPipeline
 from app.pipeline import ReviewPipeline
 from app.prompt_builder import selection_prompt
@@ -58,8 +59,7 @@ def generation_history() -> list[GenerationHistoryItem]:
         try:
             stored = ContractGenerationResponse.model_validate_json(path.read_text("utf-8"))
             items.append(GenerationHistoryItem(generation_id=stored.generation_id, created_at=stored.created_at, title=stored.result.title,
-                contract_type=stored.request.contract_type, language=stored.request.language, drafting_position=stored.request.drafting_position,
-                missing_information_count=len(stored.result.missing_information)))
+                template_label=stored.template_label, missing_information_count=len(stored.result.missing_information)))
         except (OSError, ValueError):
             continue
     return sorted(items, key=lambda item: item.created_at, reverse=True)
@@ -159,7 +159,11 @@ async def remove_review(review_id: str):
 @app.post("/api/generations", response_model=ContractGenerationResponse)
 async def generate_contract(body: ContractGenerationRequest):
     try: return await ContractGenerationPipeline(LLMClient(get_settings())).run(body)
+    except (KeyError, ValueError) as exc: raise HTTPException(422, str(exc)) from exc
     except Exception as exc: raise HTTPException(500, f"合同生成失败：{exc}") from exc
+
+@app.get("/api/generation-templates")
+async def generation_templates(): return list_templates()
 
 @app.get("/api/generations", response_model=list[GenerationHistoryItem])
 async def list_generations(): return generation_history()
@@ -178,7 +182,7 @@ async def remove_generation(generation_id: str):
 async def review_generated_contract(generation_id: str):
     generated = load_generation(generation_id)
     contract = ParsedContract(filename=f"{generated.result.title}.md", text=generated.result.document_markdown)
-    try: return await ReviewPipeline(LLMClient(get_settings()), KnowledgeBase()).run(contract, generated.request.jurisdiction, generated.request.drafting_position, "standard")
+    try: return await ReviewPipeline(LLMClient(get_settings()), KnowledgeBase()).run(contract, "CN-JP", "neutral", "standard")
     except Exception as exc: raise HTTPException(500, f"草案审查失败：{exc}") from exc
 
 @app.post("/api/verify", response_model=VerifyResponse)

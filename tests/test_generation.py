@@ -1,29 +1,17 @@
 from types import SimpleNamespace
 from fastapi.testclient import TestClient
+from app.contract_templates import TEMPLATES
 from app.schemas import GeneratedContract
 
 REQUEST = {
-    "title": "中日软件开发服务合同",
-    "contract_type": "软件开发服务",
-    "jurisdiction": "CN-JP",
-    "language": "bilingual",
-    "drafting_position": "neutral",
-    "party_a_name": "甲株式会社",
-    "party_a_role": "委托方",
-    "party_b_name": "乙科技有限公司",
-    "party_b_role": "服务方",
-    "scope": "开发并交付企业管理系统",
-    "price": "CNY 100,000",
-    "payment_terms": "验收合格后30日内付款",
-    "delivery_terms": "2026年12月31日前交付",
-    "acceptance_terms": "双方书面验收",
-    "term": "自签署日起一年",
-    "intellectual_property": "成果归委托方所有",
-    "confidentiality": "保密义务存续三年",
-    "liability": "责任上限为合同总价",
-    "dispute_resolution": "北京仲裁委员会仲裁",
-    "language_priority": "中文优先",
-    "special_requirements": "需要数据保护条款",
+    "template_id": "jp-housing-lease",
+    "answers": {
+        "property": "东京都千代田区1-1-1，居住用途",
+        "term": "2026年1月1日起两年，提前一个月通知",
+        "rent": "月租 JPY 100,000，押金两个月",
+        "parties": "甲株式会社为出租方，乙为承租方",
+        "special": "禁止转租",
+    },
 }
 
 class FakeGenerationLLM:
@@ -43,14 +31,24 @@ def test_generation_api_persists_lists_downloads_and_deletes(tmp_path, monkeypat
     with TestClient(main_module.app) as client:
         created = client.post("/api/generations", json=REQUEST)
         generation_id = created.json()["generation_id"]
+        templates = client.get("/api/generation-templates")
         history = client.get("/api/generations")
         detail = client.get(f"/api/generations/{generation_id}")
         markdown = client.get(f"/api/generations/{generation_id}/download/md")
         deleted = client.delete(f"/api/generations/{generation_id}")
     assert created.status_code == 200
     assert created.json()["result"]["missing_information"] == ["请确认验收标准"]
+    assert created.json()["template_label"] == "日本房屋租赁合同"
+    assert templates.status_code == 200
+    assert len(templates.json()) == 7
     assert history.json()[0]["generation_id"] == generation_id
+    assert history.json()[0]["template_label"] == "日本房屋租赁合同"
     assert detail.json()["model"] == "mock-generation"
     assert markdown.status_code == 200
     assert "完整合同草案" in markdown.text
     assert deleted.status_code == 200
+
+def test_contract_templates_limit_input_fields_and_have_unique_ids():
+    assert len({template.template_id for template in TEMPLATES}) == len(TEMPLATES)
+    assert all(1 <= len(template.fields) <= 5 for template in TEMPLATES)
+    assert len(next(template for template in TEMPLATES if template.template_id == "free-draft").fields) == 1
