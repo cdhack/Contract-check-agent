@@ -210,7 +210,7 @@ async def download(review_id: str, format: str):
 
 @app.get("/api/generations/{generation_id}/download/{format}")
 async def download_generation(generation_id: str, format: str):
-    if format not in {"md", "json"}: raise HTTPException(404)
+    if format not in {"docx", "json", "md"}: raise HTTPException(404)
     path = GENERATIONS / f"{generation_id}.{format}"
     if not path.exists(): raise HTTPException(404, "合同草案不存在")
     return FileResponse(path, filename=path.name)

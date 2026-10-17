@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 - 2026-10-17
+
+- Reduced template inputs, added a final supplementary-provisions field, and added the reserved System Settings tab.
+- Renamed the currency template and added editable Word contract downloads.
+
 ## 0.3.0 - 2026-10-17
 
 - Replaced the fixed generation form with seven reusable contract templates and a single free-drafting field.

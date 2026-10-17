@@ -161,7 +161,7 @@ CoverageStatus = Literal["included", "needs_confirmation"]
 
 class ContractGenerationRequest(BaseModel):
     template_id: str = Field(min_length=1, max_length=100)
-    answers: dict[str, str] = Field(min_length=1, max_length=5)
+    answers: dict[str, str] = Field(min_length=1, max_length=6)
 
     @field_validator("answers")
     @classmethod

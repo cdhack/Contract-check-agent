@@ -2,6 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from docx import Document
 from app.contract_templates import get_template, validate_answers
 from app.schemas import ContractGenerationRequest, ContractGenerationResponse, GeneratedContract
 
@@ -13,17 +14,19 @@ class ContractGenerationPipeline:
     async def run(self, request: ContractGenerationRequest) -> ContractGenerationResponse:
         template = get_template(request.template_id)
         answers = validate_answers(template, request.answers)
+        supplement = answers.get("supplement") or "无"
         prompt = f"""你是严谨的中日跨境合同起草助手。基于下方经过结构化确认的交易信息起草完整合同草案。
 不得编造未提供的商业事实；未提供且无法安全省略的信息，必须在对应条款中使用 [待确认] 占位符，并在 missing_information 中逐项列出。
 合同模板：{template.label}。模板说明：{template.description}
 参考来源：{template.source_title} {template.source_url or '无外部来源'}；版本：{template.version}。该来源只作为结构参考，不得声称已对具体交易作出法律意见。
 模板专属规则：{template.instructions}
 默认使用中日双语；每个条款必须先给出中文，再给出内容等效的日文，并保持条款编号、金额、期限、义务主体与例外条件一致。
-document_markdown 只能包含完整合同正文，不要加入解释性前言。coverage 逐项说明关键条款已纳入或仍待确认。
+document_markdown 只能包含完整合同正文，不要加入解释性前言或“补充说明”条款；系统会在正文末尾统一追加补充说明。coverage 逐项说明关键条款已纳入或仍待确认。
 
 已确认模板字段：
 {answers}"""
         draft = await self.llm.structured(prompt, GeneratedContract)
+        draft.document_markdown = draft.document_markdown.rstrip() + f"\n\n## 补充说明\n{supplement}\n"
         response = ContractGenerationResponse(generation_id=uuid.uuid4().hex, created_at=datetime.now(timezone.utc), request=ContractGenerationRequest(template_id=request.template_id, answers=answers),
             template_label=template.label, template_source_title=template.source_title, template_source_url=template.source_url, template_version=template.version,
             result=draft, model=self.llm.settings.model, report_markdown="")
@@ -35,6 +38,25 @@ document_markdown 只能包含完整合同正文，不要加入解释性前言�
         directory = ROOT / "data" / "generations"; directory.mkdir(parents=True, exist_ok=True)
         (directory / f"{response.generation_id}.json").write_text(response.model_dump_json(indent=2), "utf-8")
         (directory / f"{response.generation_id}.md").write_text(response.report_markdown, "utf-8")
+        write_contract_docx(directory / f"{response.generation_id}.docx", response.result.document_markdown)
+
+def write_contract_docx(path: Path, markdown_text: str) -> None:
+    document = Document()
+    for raw_line in markdown_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("### "):
+            document.add_heading(line[4:], level=3)
+        elif line.startswith("## "):
+            document.add_heading(line[3:], level=2)
+        elif line.startswith("# "):
+            document.add_heading(line[2:], level=1)
+        elif line.startswith("- "):
+            document.add_paragraph(line[2:], style="List Bullet")
+        else:
+            document.add_paragraph(line)
+    document.save(path)
 
 def render_generation_report(response: ContractGenerationResponse) -> str:
     request, result = response.request, response.result

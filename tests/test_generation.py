@@ -6,11 +6,10 @@ from app.schemas import GeneratedContract
 REQUEST = {
     "template_id": "jp-housing-lease",
     "answers": {
-        "property": "东京都千代田区1-1-1，居住用途",
-        "term": "2026年1月1日起两年，提前一个月通知",
-        "rent": "月租 JPY 100,000，押金两个月",
-        "parties": "甲株式会社为出租方，乙为承租方",
-        "special": "禁止转租",
+        "property_parties": "东京都千代田区1-1-1；甲株式会社为出租方，乙为承租方",
+        "term_rent": "2026年1月1日起两年；月租 JPY 100,000，押金两个月",
+        "conditions": "禁止转租",
+        "supplement": "允许饲养一只猫",
     },
 }
 
@@ -35,9 +34,11 @@ def test_generation_api_persists_lists_downloads_and_deletes(tmp_path, monkeypat
         history = client.get("/api/generations")
         detail = client.get(f"/api/generations/{generation_id}")
         markdown = client.get(f"/api/generations/{generation_id}/download/md")
+        word = client.get(f"/api/generations/{generation_id}/download/docx")
         deleted = client.delete(f"/api/generations/{generation_id}")
     assert created.status_code == 200
     assert created.json()["result"]["missing_information"] == ["请确认验收标准"]
+    assert "补充说明" in created.json()["result"]["document_markdown"]
     assert created.json()["template_label"] == "日本房屋租赁合同"
     assert templates.status_code == 200
     assert len(templates.json()) == 7
@@ -46,9 +47,11 @@ def test_generation_api_persists_lists_downloads_and_deletes(tmp_path, monkeypat
     assert detail.json()["model"] == "mock-generation"
     assert markdown.status_code == 200
     assert "完整合同草案" in markdown.text
+    assert word.status_code == 200
+    assert word.content[:2] == b"PK"
     assert deleted.status_code == 200
 
 def test_contract_templates_limit_input_fields_and_have_unique_ids():
     assert len({template.template_id for template in TEMPLATES}) == len(TEMPLATES)
-    assert all(1 <= len(template.fields) <= 5 for template in TEMPLATES)
+    assert all(1 <= len(template.fields) <= 6 for template in TEMPLATES)
     assert len(next(template for template in TEMPLATES if template.template_id == "free-draft").fields) == 1
