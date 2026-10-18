@@ -2,6 +2,7 @@ from __future__ import annotations
 import hmac
 import secrets
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,10 +24,18 @@ class AccessStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self):
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
-        return connection
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def _initialize(self) -> None:
         with self._connect() as connection:
@@ -68,6 +77,17 @@ class AccessStore:
             if not hmac.compare_digest(configured, password): return False
             connection.execute("UPDATE sessions SET admin_unlocked = 1 WHERE session_id = ?", (session.session_id,))
             return True
+
+    def change_admin_password(self, session: AccessSession, current_password: str, new_password: str) -> bool:
+        if session.role != "admin": return False
+        with self._connect() as connection:
+            configured = connection.execute("SELECT value FROM settings WHERE key = 'admin_password'").fetchone()["value"]
+            if not hmac.compare_digest(configured, current_password): return False
+            connection.execute("UPDATE settings SET value = ? WHERE key = 'admin_password'", (new_password,))
+            return True
+
+    def clear_sessions(self) -> None:
+        with self._connect() as connection: connection.execute("DELETE FROM sessions")
 
     def record_activity(self, session: AccessSession, action: str, contract_name: str) -> None:
         with self._connect() as connection:

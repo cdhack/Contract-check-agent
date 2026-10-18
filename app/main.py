@@ -3,11 +3,12 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
 from app.access import AccessSession, AccessStore
+from app.backups import BackupService
 from app.config import LLMSettings, get_settings, save_settings
 from app.knowledge import KnowledgeBase
 from app.llm_client import LLMClient
@@ -16,9 +17,9 @@ from app.contract_templates import list_templates
 from app.generation import ContractGenerationPipeline
 from app.pipeline import ReviewPipeline
 from app.prompt_builder import selection_prompt
-from app.schemas import AccessLoginRequest, AccessSessionResponse, ActivityRecord, AdminPasswordRequest, AskSelectionRequest, AskSelectionResponse, ContractGenerationRequest, ContractGenerationResponse, EmployeeCreateRequest, EmployeeRecord, EmployeeRoleUpdateRequest, GenerationHistoryItem, KnowledgeSourceUpdate, ParsedContract, ReviewDepth, ReviewHistoryItem, ReviewResponse, ReviewStance, VerificationResult, VerifyRequest, VerifyResponse
+from app.schemas import AccessLoginRequest, AccessSessionResponse, ActivityRecord, AdminPasswordChangeRequest, AdminPasswordRequest, AskSelectionRequest, AskSelectionResponse, ContractGenerationRequest, ContractGenerationResponse, EmployeeCreateRequest, EmployeeRecord, EmployeeRoleUpdateRequest, GenerationHistoryItem, KnowledgeSourceUpdate, ParsedContract, ReviewDepth, ReviewHistoryItem, ReviewResponse, ReviewStance, VerificationResult, VerifyRequest, VerifyResponse
 
-ROOT = Path(__file__).resolve().parents[1]; REPORTS = ROOT / "data" / "reports"; GENERATIONS = ROOT / "data" / "generations"; ACCESS = AccessStore(ROOT / "data" / "access.sqlite")
+ROOT = Path(__file__).resolve().parents[1]; DATA = ROOT / "data"; REPORTS = DATA / "reports"; GENERATIONS = DATA / "generations"; ACCESS = AccessStore(DATA / "access.sqlite"); BACKUPS = BackupService(DATA)
 app = FastAPI(title="contract-check-agent")
 app.mount("/static", StaticFiles(directory=ROOT / "app" / "static"), name="static")
 templates = Jinja2Templates(directory=ROOT / "app" / "templates")
@@ -131,6 +132,31 @@ async def admin_unlock(body: AdminPasswordRequest, request: Request):
     if session.role != "admin": raise HTTPException(403, "仅管理员可以进入后台")
     if not ACCESS.unlock_admin(session, body.password): raise HTTPException(403, "管理密码错误")
     return AccessSessionResponse(authenticated=True, employee_id=session.employee_id, role=session.role, admin_unlocked=True)
+
+@app.post("/api/admin/password")
+async def admin_change_password(body: AdminPasswordChangeRequest, request: Request):
+    session = require_admin(request)
+    if not ACCESS.change_admin_password(session, body.current_password, body.new_password): raise HTTPException(403, "当前管理密码错误")
+    ACCESS.record_activity(session, "修改管理密码", "系统设置")
+    return {"ok": True}
+
+@app.get("/api/admin/backup/export")
+async def admin_export_backup(request: Request):
+    session = require_admin(request)
+    ACCESS.record_activity(session, "导出数据备份", "本地数据")
+    filename = f"contract-check-agent-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
+    return Response(BACKUPS.export(), media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+@app.post("/api/admin/backup/import")
+async def admin_import_backup(request: Request, file: UploadFile = File(...)):
+    require_admin(request)
+    if not file.filename or not file.filename.lower().endswith(".zip"): raise HTTPException(400, "请选择 ZIP 备份文件")
+    try:
+        BACKUPS.restore(await file.read())
+        ACCESS._initialize()
+        ACCESS.clear_sessions()
+        return {"ok": True, "message": "数据已恢复，知识库索引将在下次使用时自动重建。请重新登录。"}
+    except ValueError as exc: raise HTTPException(400, str(exc)) from exc
 
 @app.get("/api/admin/employees", response_model=list[EmployeeRecord])
 async def admin_employees(request: Request):

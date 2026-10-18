@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.6 - 2026-10-18
+
+- Added administrator password changes plus ZIP backup export and import for local business data, reports, drafts, and uploaded knowledge sources.
+
 ## 0.5.5 - 2026-10-17
 
 - Replaced the in-console employee access overlay with a dedicated login page and server-side redirects between login and the authenticated console.

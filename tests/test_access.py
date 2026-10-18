@@ -1,9 +1,11 @@
 from fastapi.testclient import TestClient
 from app.access import AccessStore
+from app.backups import BackupService
 
 def test_employee_access_and_admin_controls(tmp_path, monkeypatch):
     import app.main as main_module
     monkeypatch.setattr(main_module, "ACCESS", AccessStore(tmp_path / "access.sqlite"))
+    monkeypatch.setattr(main_module, "BACKUPS", BackupService(tmp_path))
     with TestClient(main_module.app) as client:
         assert client.get("/api/reviews").status_code == 401
         assert client.post("/api/access/login", json={"employee_id": "missing"}).status_code == 404
@@ -17,10 +19,20 @@ def test_employee_access_and_admin_controls(tmp_path, monkeypatch):
         employees = client.get("/api/admin/employees")
         updated = client.put("/api/admin/employees/3", json={"role": "admin"})
         deleted = client.delete("/api/admin/employees/3")
+        assert client.post("/api/admin/password", json={"current_password": "wrong", "new_password": "2"}).status_code == 403
+        assert client.post("/api/admin/password", json={"current_password": "1", "new_password": "2"}).status_code == 200
+        reports = tmp_path / "reports"; reports.mkdir(); report = reports / "report.md"; report.write_text("original", "utf-8")
+        backup = client.get("/api/admin/backup/export")
+        report.write_text("changed", "utf-8")
+        restored = client.post("/api/admin/backup/import", files={"file": ("backup.zip", backup.content, "application/zip")})
     assert created.status_code == 200
     assert any(item["employee_id"] == "3" for item in employees.json())
     assert updated.json()["role"] == "admin"
     assert deleted.status_code == 200
+    assert backup.status_code == 200
+    assert restored.status_code == 200
+    assert report.read_text("utf-8") == "original"
+    assert client.get("/api/access/session").json()["authenticated"] is False
 
 
 def test_login_page_and_console_redirects_are_server_enforced():
@@ -45,7 +57,7 @@ def test_login_page_and_console_redirects_are_server_enforced():
     assert script.headers["cache-control"] == "no-store"
     assert login_script.headers["cache-control"] == "no-store"
     assert 'access-gate' not in response.text
-    assert '<script src="/static/app.js?v=0.5.5"></script>' in response.text
+    assert '<script src="/static/app.js?v=0.5.6"></script>' in response.text
     assert 'window.location.replace("/login")' in script.text
     assert authenticated_login_redirect.status_code == 303
     assert authenticated_login_redirect.headers["location"] == "/"

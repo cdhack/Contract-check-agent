@@ -218,6 +218,10 @@ class AccessSessionResponse(BaseModel):
 class AdminPasswordRequest(BaseModel):
     password: str = Field(min_length=1, max_length=100)
 
+class AdminPasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=100)
+    new_password: str = Field(min_length=1, max_length=100)
+
 class EmployeeCreateRequest(BaseModel):
     employee_id: str = Field(min_length=1, max_length=100)
     role: EmployeeRole = "user"
