@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3 - 2026-10-17
+
+- Made employee entry explicit for both click and Enter interactions, added visible button hover state, and disabled caching for the entry page and static assets.
+
 ## 0.5.2 - 2026-10-17
 
 - Versioned the browser login script URL so refreshed pages cannot reuse a stale pre-fix login script.

@@ -23,11 +23,16 @@ def test_employee_access_and_admin_controls(tmp_path, monkeypatch):
     assert deleted.status_code == 200
 
 
-def test_index_uses_the_current_login_script_version():
+def test_index_uses_the_current_login_script_version_and_disables_caching():
     import app.main as main_module
 
     with TestClient(main_module.app) as client:
         response = client.get("/")
+        script = client.get("/static/app.js")
 
     assert response.status_code == 200
-    assert '<script src="/static/app.js?v=0.5.2"></script>' in response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert script.headers["cache-control"] == "no-store"
+    assert '<button id="access-login" type="submit">' in response.text
+    assert '<script src="/static/app.js?v=0.5.3"></script>' in response.text
+    assert '$("employee-id").onkeydown' in script.text

@@ -26,13 +26,14 @@ templates = Jinja2Templates(directory=ROOT / "app" / "templates")
 @app.middleware("http")
 async def require_employee_access(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/static") or path in {"/", "/api/access/login", "/api/access/session", "/api/access/logout"}:
-        return await call_next(request)
-    if path.startswith("/api/"):
+    if not (path.startswith("/static") or path in {"/", "/api/access/login", "/api/access/session", "/api/access/logout"}) and path.startswith("/api/"):
         session = ACCESS.session(request.cookies.get("contract_access"))
         if session is None: return JSONResponse(status_code=401, content={"detail": "请先输入工号"})
         request.state.access = session
-    return await call_next(request)
+    response = await call_next(request)
+    if path == "/" or path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 def current_access(request: Request) -> AccessSession:
     return request.state.access
