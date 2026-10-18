@@ -23,17 +23,29 @@ def test_employee_access_and_admin_controls(tmp_path, monkeypatch):
     assert deleted.status_code == 200
 
 
-def test_index_uses_the_current_login_script_version_and_disables_caching():
+def test_login_page_and_console_redirects_are_server_enforced():
     import app.main as main_module
 
     with TestClient(main_module.app) as client:
-        response = client.get("/")
+        redirect = client.get("/", follow_redirects=False)
+        login_page = client.get("/login")
+        assert client.post("/api/access/login", json={"employee_id": "1"}).status_code == 200
+        response = client.get("/", follow_redirects=False)
+        authenticated_login_redirect = client.get("/login", follow_redirects=False)
         script = client.get("/static/app.js")
+        login_script = client.get("/static/login.js")
 
+    assert redirect.status_code == 303
+    assert redirect.headers["location"] == "/login"
+    assert login_page.status_code == 200
+    assert '<form id="login-form">' in login_page.text
+    assert '<script src="/static/login.js?v=0.5.5"></script>' in login_page.text
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
     assert script.headers["cache-control"] == "no-store"
-    assert '<button id="access-login" type="submit">' in response.text
-    assert '<script src="/static/app.js?v=0.5.4"></script>' in response.text
-    assert '$("employee-id").onkeydown' in script.text
-    assert 'if(!accessSession)showAccessGate();' in script.text
+    assert login_script.headers["cache-control"] == "no-store"
+    assert 'access-gate' not in response.text
+    assert '<script src="/static/app.js?v=0.5.5"></script>' in response.text
+    assert 'window.location.replace("/login")' in script.text
+    assert authenticated_login_redirect.status_code == 303
+    assert authenticated_login_redirect.headers["location"] == "/"

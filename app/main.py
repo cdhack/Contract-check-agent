@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
@@ -31,7 +31,7 @@ async def require_employee_access(request: Request, call_next):
         if session is None: return JSONResponse(status_code=401, content={"detail": "请先输入工号"})
         request.state.access = session
     response = await call_next(request)
-    if path == "/" or path.startswith("/static/"):
+    if path in {"/", "/login"} or path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -93,7 +93,16 @@ def delete_generation(generation_id: str) -> None:
         if path.exists(): path.unlink()
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request): return templates.TemplateResponse(request, "index.html")
+async def index(request: Request):
+    if ACCESS.session(request.cookies.get("contract_access")) is None:
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse(request, "index.html")
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    if ACCESS.session(request.cookies.get("contract_access")) is not None:
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(request, "login.html")
 
 @app.get("/api/access/session", response_model=AccessSessionResponse)
 async def access_session(request: Request):

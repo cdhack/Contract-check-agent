@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.5 - 2026-10-17
+
+- Replaced the in-console employee access overlay with a dedicated login page and server-side redirects between login and the authenticated console.
+
 ## 0.5.4 - 2026-10-17
 
 - Prevented an older unauthenticated session check from reopening the employee access gate after successful login.
