@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4 - 2026-10-17
+
+- Prevented an older unauthenticated session check from reopening the employee access gate after successful login.
+
 ## 0.5.3 - 2026-10-17
 
 - Made employee entry explicit for both click and Enter interactions, added visible button hover state, and disabled caching for the entry page and static assets.

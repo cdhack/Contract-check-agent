@@ -34,5 +34,6 @@ def test_index_uses_the_current_login_script_version_and_disables_caching():
     assert response.headers["cache-control"] == "no-store"
     assert script.headers["cache-control"] == "no-store"
     assert '<button id="access-login" type="submit">' in response.text
-    assert '<script src="/static/app.js?v=0.5.3"></script>' in response.text
+    assert '<script src="/static/app.js?v=0.5.4"></script>' in response.text
     assert '$("employee-id").onkeydown' in script.text
+    assert 'if(!accessSession)showAccessGate();' in script.text
